@@ -2,66 +2,83 @@
 
 ## Elementos importantes del docker-compose.yml
 
-## Comando para crear una red
-- Lo primero, es crear una red, en la cual se conectaran los futuros contenedores, para ello, entroducir en una terminal: 
-    - docker network create --subnet 10.1.0.0/24 --gateway 10.1.0.1 br02
-    - Donde br02 (nombre de la red), y las ip el rango donde pertenece la red.
-
-## Comandos para añadir los contenedores a una red.
-En cada uno de los contenedores, luego de declarar la imagen, colocamos:
-
+### Creación del contenedor con el servidor apache:
 ~~~
-networks:
-    br02:
+apache_web:
+    container_name: apache_server_practica
+    image: httpd
+    networks:
+      br02:
         ipv4_address: 10.1.0.4
+    ports:
+      - 8008:8008
+    volumes:
+      - apache_index:/usr/local/apache2/htdocs
+      - apache_conf:/usr/local/apache2/conf
 ~~~
+- Asignamos una ip fija (10.1.0.4), dentro de la red br02 creada previamente.
+- Asociamos los directorios, htdocs y conf a sendos volumenes, los cuales fueron creados previamente.
 
-El comando anterior, indica que el contenedor pertenecera a la red br02 con la ip especificada como fija.
-
-Una vez tenemos el comando anterior en cada uno de los contenedores, escribimos el siguiente comando a la altura de la etiqueta service:
+### Creación del contenedor del cliente:
 ~~~
+apache_cliente:
+    image: kasmweb/desktop:1.10.0-rolling
+    networks:
+      br02:
+    stdin_open: true  # docker run -i
+    tty: true         # docker run -t
+    environment:
+      VNC_PW: password
+    ports:
+      - 6901:6901
+    dns:
+      - 10.1.0.40
+~~~
+- El contenedor dispondra de una ip dinamica, dentro de la red br02 creada previamente.
+- El servidor dns del cliente se encuentra en 10.1.0.40.
+- Con el apartado environment, permitimos la conexión con el servidor, es muy importante con VNC_PW asignarle la password.
+
+### Volumenes y conexiones de red:
+~~~
+volumes:
+  apache_index:
+    external: true
+    name: apache-data-practica
+  apache_conf:
+    external: true
+    name: apache-conf-practica
+  conf:
+    external: true
+    name: dns-main_conf
 networks: 
-    br02:
-        external: true
+  br02:
+    external: true
 ~~~
-Dicho comando indica que la red br02 ya existe, y que se va a trabajar con ella. Lo cual evita que se cree una nueva red de forma predeterminada.
+- Con el anterior codigo, indicamos que los volumenes asignados a los contenedores los busque en el exterior en vez de crearlos, y lo mismo acontece con la red utilizada para la conexión (br02).
 
-## Comando para asignar un servidor predeterminado al contenedor cliente.
-Añadiendo el siguiente comando, a la altura de la etiqueta image de cada contenedor, se especifica que dicha ip hace referencía al servidor dns que atendera nuestras peticiones de manera predeterminada.
+### Archivos de configuración del dns:
+
+- En el volumen conf, asociado a la ruta /etc/bind del contenedor, encontramos el archivo db.example.com con el siguiente codigo:
 ~~~
-dns:
-    - 10.1.0.4
+;
+; BIND data file for example.com
+;
+$TTL	604800
+@	IN	SOA	example.com. root.example.com. (
+			      2		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+@	IN	NS	ns.example.com.
+@	IN	A	10.1.0.4
+@	IN	AAAA	::1
+ns  IN  A   10.1.0.4
+ggg	IN	A	10.1.0.4
+maquina1	IN 	A 	10.1.0.4
+ggg IN	TXT	"Aqui va un token de seguridad"
+ooo	IN	CNAME	maquina1
 ~~~
 
-En un principio funciona, pero hay que tener en cuenta que a partir de determinada versión del sistema operativo ya no se utiliza el archivo **resolv.conf** como configurador del servidor dns predeterminado. En cambio se utiliza el servicio systemd, el cual trabaja de otra forma. Por eso, cada vez que se reiniciaba el cliente, el valor predeterminado del archivo resolv.conf volvía al predeterminado (127.0.0.11).
-
-## Procedimiento de creacion de los contenedores.
-- En una terminal colocada en la ruta del archivo docker-compose.yml, escribimos el siguiente comando para crearlos:
-    - docker-compose up
-
-- Para iniciar el conjunto de contenedores especificados en el docker-compose.yml:
-    - docker-compose start
-
-- Para parar el conjunto de contenedores especificados en el docker-compose.yml:
-    - docker-compose stop
-
-- Para borrar el conjunto de contenedores especificados en el docker-compose.yml:
-    - docker-compose down
-
-- Para reinstalar el conjunto de contenedores especificados en el docker-compose.yml:
-    - docker-compose restart
-
-## Modificación de la configuración, arranque y parada de servicio bind9
-Hay que especificar que cada vez que se realizan cambios en los archivos de configuración del contenedor, es obligatorio el reinicio del servicio, en nuestro caso basta con reiniciar el contenedor del servidor.
-
-- Para parar el contenedor del servidor, basta con escribir el siguiente comando en una terminal:
-    - docker **restart** nombre_del_contenedor
-
-- Para parar el contenedor del servidor, basta con escribir el siguiente comando en una terminal:
-    - docker **stop** nombre_del_contenedor
-
-- Para iniciar el contenedor del servidor, basta con escribir el siguiente comando en una terminal:
-    - docker **start** nombre_del_contenedor
-
-- Para borrar el contenedor del servidor, basta con escribir el siguiente comando en una terminal:
-    - docker **rm** nombre_del_contenedor
+- Como podemos comprobar, asiganamos las distintas direcciones registradas del dns a nuestro servidor apache, asignando la ip del servidor. 
