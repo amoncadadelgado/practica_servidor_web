@@ -7,7 +7,7 @@ services:
       br02:
         ipv4_address: 10.1.0.4
     ports:
-      - 8008:8008
+      - 80:80
     volumes:
       - apache_index:/usr/local/apache2/htdocs
       - apache_conf:/usr/local/apache2/conf
