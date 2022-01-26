@@ -32,16 +32,34 @@ services:
       - 53:53
     volumes:
       - conf:/etc/bind
+  wireshark:
+    image: linuxserver/wireshark:latest
+    container_name: wireshark
+    cap_add:
+      - NET_ADMIN
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - config_wireshark:/config
+    ports:
+      - 3000:3000 #optional
+    restart: unless-stopped
 volumes:
   apache_index:
     external: true
     name: apache-data-practica
   apache_conf:
     external: true
-    name: apache-conf-practica
+    name: apache-conf-practica1
   conf:
     external: true
     name: dns-main_conf
+  config_wireshark:
+    external: true
+    name: wireshark_config
 networks: 
   br02:
     external: true

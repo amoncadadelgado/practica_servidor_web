@@ -1,8 +1,8 @@
 # Práctica servidor web
 
-## Elementos importantes del docker-compose.yml
+Elementos importantes del docker-compose.yml
 
-### Creación del contenedor con el servidor apache:
+## Creación del contenedor con el servidor apache:
 ~~~
 apache_web:
     container_name: apache_server_practica
@@ -19,7 +19,7 @@ apache_web:
 - Asignamos una ip fija (10.1.0.4), dentro de la red br02 creada previamente.
 - Asociamos los directorios, htdocs y conf a sendos volumenes, los cuales fueron creados previamente.
 
-### Creación del contenedor del cliente:
+## Creación del contenedor del cliente:
 ~~~
 apache_cliente:
     image: kasmweb/desktop:1.10.0-rolling
@@ -38,7 +38,30 @@ apache_cliente:
 - El servidor dns del cliente se encuentra en 10.1.0.40.
 - Con el apartado environment, permitimos la conexión con el servidor, es muy importante con VNC_PW asignarle la password.
 
-### Volumenes y conexiones de red:
+## Creación del contenedor del wireshark:
+~~~
+wireshark:
+    image: linuxserver/wireshark:latest
+    container_name: wireshark
+    cap_add:
+      - NET_ADMIN
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - config_wireshark:/config
+    ports:
+      - 3000:3000 #optional
+    restart: unless-stopped
+~~~
+Donde:
+- **network_mode: host**, indica que el contenedor se conecta a la red del host.
+- El resto de valores, es recomendable dejarlas tal cual se observan.
+
+
+## Volumenes y conexiones de red:
 ~~~
 volumes:
   apache_index:
@@ -46,10 +69,13 @@ volumes:
     name: apache-data-practica
   apache_conf:
     external: true
-    name: apache-conf-practica
+    name: apache-conf-practica1
   conf:
     external: true
     name: dns-main_conf
+  config_wireshark:
+    external: true
+    name: wireshark_config
 networks: 
   br02:
     external: true
@@ -70,18 +96,19 @@ $TTL	604800
 			2419200		; Expire
 			 604800 )	; Negative Cache TTL
 ;
+
+; registro ns responsable de la zona.
 @	IN	NS	ns.example.com.
-@	IN	A	10.1.0.40
-@	IN	AAAA	::1
 ns  IN  A   10.1.0.40
-ggg	IN	A	10.1.0.4
-example	IN 	A 	10.1.0.4
-ggg IN	TXT	"Aqui va un token de seguridad"
-primera	IN	CNAME	example
-segunda	IN	CNAME	example
+
+; @	IN	A	10.1.0.4 Asocia el dominio example.com al servidor apache.
+@	IN	A	10.1.0.4
+@	IN	AAAA	::1
+
+primera	IN	CNAME	example.com.
+segunda	IN	CNAME	@
 ~~~
 - Donde se añadieron dos CNAME, para que cada una de las direcciones apunte al servidor apache (10.1.0.4). Luego será el servidor apache el que decida que index devolver.
-
 ## Modificación de los archivos de configuración del apache:
 En el volumen conf_apache, asociado a la ruta /usr/local/apache2/conf del contenedor, disponemos del archivo **httpd.conf** en el cual, descomentamos la línea del include:
 ~~~
@@ -90,24 +117,27 @@ Include conf/extra/httpd-vhosts.conf
 ~~~
 Una vez descomentada la anterior línea, entramos en el directorio **extra** abrimos el archivo **httpd-vhosts.conf** donde escribimos las siguientes líneas:
 ~~~
-<VirtualHost *:80>
+<VirtualHost primera.example.com:80>
     ServerAdmin webmaster@dummy-host.example.com
     DocumentRoot "/usr/local/apache2/htdocs/primera"
-    ServerName primera.example.com
+    ServerName example.com
+    ServerAlias primera.example.com
     ErrorLog "logs/dummy-host.example.com-error_log"
     CustomLog "logs/dummy-host.example.com-access_log" common
 </VirtualHost>
 
-<VirtualHost *:80>
+<VirtualHost segunda.example.com:80>
     ServerAdmin webmaster@dummy-host2.example.com
     DocumentRoot "/usr/local/apache2/htdocs/segunda"
-    ServerName segunda.example.com
+    ServerName example.com
+    ServerAlias segunda.example.com
     ErrorLog "logs/dummy-host2.example.com-error_log"
     CustomLog "logs/dummy-host2.example.com-access_log" common
 </VirtualHost>
 ~~~
-- En DocumentRoot asignamos la ruta de la carpeta que contiene el index correspondiente.
-- En ServerName asignamos la dirección de la ruta asociada, la cual definimos en los archivos de zona del dns.
-- El resto de valores dejarlos tal cual se encuentran.
+Donde:
+- **DocumentRoot:** asignamos la ruta de la carpeta que contiene el index correspondiente.
+- **ServerName:** asignamos el nombre de dominio base.
+- **ServerAlias:** especifica el nombre del subdominio.
 
 Hay que resaltar que las rutas asignadas en DocumentRoot deben existir, para ello, **en el volumen data_apache asociado a la ruta /usr/local/apache2/htdocs** creamos dichos directorios en nuestro caso los nombres son primera y segunda.
